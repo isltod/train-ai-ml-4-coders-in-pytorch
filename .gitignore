@@ -3,6 +3,7 @@
 ptb.*.*
 data/
 *.pth
+horse-or-human/
 
 # supabase
 .env*
