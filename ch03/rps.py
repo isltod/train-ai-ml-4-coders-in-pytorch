@@ -43,8 +43,11 @@ for name, paramter in inception_v3.named_parameters():
 # 3개로 분류에 맞도록 마지막 층(fc)을 바꿔치기...
 num_ftrs = inception_v3.fc.in_features
 inception_v3.fc = nn.Sequential(
+    # 드롭아웃을 추가하면 빨리 잘 훈련된다는데...잘은 모르겠고 빠르기는 하다..
+    nn.Dropout(0.5),
     nn.Linear(num_ftrs, 1024),
     nn.ReLU(),
+    nn.Dropout(0.5),
     nn.Linear(1024, 3),
 )
 
