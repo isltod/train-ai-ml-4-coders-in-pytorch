@@ -1,6 +1,34 @@
+import os
+import tarfile
+import urllib.request
+import zipfile
+
+
 def print_model_summary(model):
     for name, module in model.named_modules():
         print(f"{name}: {module.__class__.__name__}")
+
+
+def download_and_extract(url, destination, file_name, dir_name):
+    if not os.path.exists(destination):
+        os.makedirs(destination, exist_ok=True)
+    file_path = os.path.join(destination, file_name)
+
+    if not os.path.exists(file_path):
+        print(f"Downloading {url}...")
+        urllib.request.urlretrieve(url, file_path)
+        print("Download complete.")
+
+    if not os.path.exists(os.path.join(destination, dir_name)):
+        print("Extracting files...")
+        ext = os.path.splitext(file_name)[1]
+        if ext == ".zip":
+            with zipfile.ZipFile(file_path, "r") as zip_ref:
+                zip_ref.extractall(destination)
+        elif ext == ".gz":
+            with tarfile.open(file_path, "r:gz") as tar:
+                tar.extractall(destination)
+        print("Extraction complete.")
 
 
 stopwords = [
