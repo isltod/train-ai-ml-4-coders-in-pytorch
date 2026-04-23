@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchinfo import summary
+from torch.utils.data import DataLoader, TensorDataset
 
 
 with open("data/sarcasm.json", "r") as f:
@@ -44,26 +45,43 @@ for item in sentences:
 max_length = 100
 training_size = 23000
 
+# 훈련과 테스트 나누고
 training_sentences = sentences[0:training_size]
 testing_sentences = sentences[training_size:]
 
+# 정답지 라벨은 바로 텐서로...
 training_labels = labels[0:training_size]
+training_labels = torch.tensor(training_labels, dtype=torch.float32)
 testing_labels = labels[training_size:]
+testing_labels = torch.tensor(testing_labels, dtype=torch.float32)
 
+# 어휘 사전은 훈련에만 만들고
 word_index = build_vocab(training_sentences)
 print(len(word_index))
+
+# 훈련, 테스트 데이터를 벡터, 패딩, 텐서로
 training_sequences = texts_to_sequences(training_sentences, word_index)
 training_padded = pad_sequences(training_sequences, max_length)
+training_padded = torch.tensor(training_padded, dtype=torch.long)
 
 testing_sequences = texts_to_sequences(testing_sentences, word_index)
 testing_padded = pad_sequences(testing_sequences, max_length)
+testing_padded = torch.tensor(testing_padded, dtype=torch.long)
 
 # 많이 나오는 단어...근데 여기 트럼프가 있네...
 word_frequency = word_frequency(training_sentences, word_index)
 for i in range(10):
     print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
 
+# 데이터 로더에 넣어서 준비...
+batch_size = 32
+train_dataset = TensorDataset(training_padded, training_labels)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_dataset = TensorDataset(testing_padded, testing_labels)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
+
+# 모델 클래스 정의...
 class TextClassificationModel(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim=24):
         super(TextClassificationModel, self).__init__()
@@ -97,19 +115,114 @@ class TextClassificationModel(nn.Module):
         return self.sigmoid(x)
 
 
-# 하이퍼파라미터 설정
-vocab_size = len(word_index)
-# 책 소스에서 16과 100이 있는데, 일단 순서대로 16부터...
-embedding_dim = 16
+# 모델, 손실함수, 최적화 함수 설정
+# 패딩 추가해서 단어사전 크기...
+vocab_size = len(word_index) + 1
+embedding_dim = 100
 
 model = TextClassificationModel(vocab_size, embedding_dim)
 criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters())
+# 최적화 Adam의 lr, β 값 등은 기본값으로...하면 과대적합 심하고, lr을 1/10으로 줄여서 과대적합 감소...약간...
+# optimizer = optim.Adam(model.parameters())
+optimizer = optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False)
 print(model)
-batch_size = 32
 summary(
     model,
     input_size=(batch_size, max_length),
     # 뭐지? 이거 때문에 되고 안되고가...임베딩 층에 타입을 지정한다는데...
     dtypes=[torch.long],
 )
+
+# 학습을 시켜보는데...
+# 먼저 모델을 GPU에 넣고...
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+train_loss_history = []
+train_acc_history = []
+val_loss_history = []
+val_acc_history = []
+
+# 100번 돌아가면서...
+num_epochs = 100
+for epoch in range(num_epochs):
+    model.train()
+    train_loss = 0.0
+    train_correct = 0
+    train_total = 0
+
+    for inputs, targets in train_loader:
+        inputs, targets = inputs.to(device), targets.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs.squeeze(), targets)
+        loss.backward()
+        optimizer.step()
+
+        train_loss += loss.item()
+        train_total += targets.size(0)
+        # 마지막 fc와 sigmoid 거쳐 나올 때 (32, 1)로 나오는 걸 (32,)로...모양은 비슷해보이지만 행렬을 벡터로...
+        train_correct += ((outputs.squeeze() > 0.5) == targets).sum().item()
+
+    # validation
+    model.eval()
+    val_loss = 0.0
+    val_correct = 0
+    val_total = 0
+
+    with torch.no_grad():
+        for inputs, targets in test_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs.squeeze(), targets)
+
+            val_loss += loss.item()
+            val_total += targets.size(0)
+            val_correct += ((outputs.squeeze() > 0.5) == targets).sum().item()
+
+    print(f"Epoch {epoch+1}/{num_epochs}:")
+    train_loss_history.append(train_loss / len(train_loader))
+    train_acc_history.append(train_correct / train_total)
+    val_loss_history.append(val_loss / len(test_loader))
+    val_acc_history.append(val_correct / val_total)
+    print(
+        f"Train Loss: {train_loss/len(train_loader):.4f}, Train Acc: {train_correct/train_total:.4f}"
+    )
+    print(
+        f"Val Loss: {val_loss/len(test_loader):.4f}, Val Acc: {val_correct/val_total:.4f}"
+    )
+
+# 모델을 저장해본다...
+torch.save(model.state_dict(), "sarcasm_model.pth")
+
+
+def plot_training_metrics(
+    train_loss_history, train_acc_history, val_loss_history, val_acc_history
+):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    epochs = range(1, len(train_loss_history) + 1)
+    # loss
+    ax1.plot(epochs, train_loss_history, label="Train Loss")
+    ax1.plot(epochs, val_loss_history, label="Val Loss")
+    ax1.set_xlabel("Epochs")
+    ax1.set_ylabel("Loss")
+    ax1.legend()
+    ax1.set_title("Training and Validation Loss")
+    ax1.grid(True)
+    # accuracy
+    ax2.plot(epochs, train_acc_history, label="Train Acc")
+    ax2.plot(epochs, val_acc_history, label="Val Acc")
+    ax2.set_xlabel("Epochs")
+    ax2.set_ylabel("Accuracy")
+    ax2.legend()
+    ax2.set_title("Training and Validation Accuracy")
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+plot_training_metrics(
+    train_loss_history, train_acc_history, val_loss_history, val_acc_history
+)
+# 이 버전은 과대적합 문제가 있다고...
