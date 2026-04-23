@@ -19,15 +19,21 @@ def tokenize(text):
     return filtered_tokens
 
 
-def build_vocab(texts):
+def build_vocab(texts, max_words=10000):
     counter = Counter()
     for sentence in texts:
         tokens = tokenize(sentence)
         counter.update(tokens)
 
-    sorted_words = sorted(counter.items(), key=lambda x: x[1], reverse=True)
-    vocab = {word: i + 1 for i, (word, _) in enumerate(sorted_words)}
+    # 이게 아예 사라지고...
+    # sorted_words = sorted(counter.items(), key=lambda x: x[1], reverse=True)
+    # 빈도수 높은 순서로 최대 max_words - 2(pad, unk) 까지만 선택해서 사전 만들기
+    most_common_words = counter.most_common(max_words - 2)
+
+    # 그래서 인덱스는 2부터 시작
+    vocab = {word: i + 2 for i, (word, _) in enumerate(most_common_words)}
     vocab["<pad>"] = 0
+    vocab["<unk>"] = 1
     return vocab
 
 

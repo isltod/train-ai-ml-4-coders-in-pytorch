@@ -1,3 +1,6 @@
+# embedding_sarcasm.py의 overfit을 수정...
+# 1. lr을 1/10으로 줄이기...
+# 2. 단어 사전 어휘 수 줄이기
 import json
 import matplotlib.pyplot as plt
 from helper import *
@@ -6,6 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchinfo import summary
 from torch.utils.data import DataLoader, TensorDataset
+from collections import OrderedDict
 
 
 with open("data/sarcasm.json", "r") as f:
@@ -42,9 +46,31 @@ training_labels = torch.tensor(training_labels, dtype=torch.float32)
 testing_labels = labels[training_size:]
 testing_labels = torch.tensor(testing_labels, dtype=torch.float32)
 
-# 어휘 사전은 훈련에만 만들고
-word_index = build_vocab(training_sentences)
+# 어휘 사전은 훈련에만 만들고 - helper의 함수를 수정해서 단어 수 제한해서 과대적합 줄이기...
+vocab_size = 2000
+word_index = build_vocab(training_sentences, vocab_size)
 print(len(word_index))
+
+# 많이 나오는 단어...근데 여기 트럼프가 있네...
+word_frequency = word_frequency(training_sentences, word_index)
+for i in range(10):
+    print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
+
+# 단어 출현 빈도 그래프...
+# newlist = sorted(word_frequency.items(), key=lambda x: x[1], reverse=True)
+# newdict = OrderedDict(newlist)
+
+# xs, ys = [], []
+# curr_x = 1
+# for item in newdict:
+#     xs.append(curr_x)
+#     ys.append(newdict[item])
+#     curr_x += 1
+
+# print(ys)
+# plt.axis([300, 10000, 0, 100])
+# plt.plot(xs, ys)
+# plt.show()
 
 # 훈련, 테스트 데이터를 벡터, 패딩, 텐서로
 training_sequences = texts_to_sequences(training_sentences, word_index)
@@ -54,11 +80,6 @@ training_padded = torch.tensor(training_padded, dtype=torch.long)
 testing_sequences = texts_to_sequences(testing_sentences, word_index)
 testing_padded = pad_sequences(testing_sequences, max_length)
 testing_padded = torch.tensor(testing_padded, dtype=torch.long)
-
-# 많이 나오는 단어...근데 여기 트럼프가 있네...
-word_frequency = word_frequency(training_sentences, word_index)
-for i in range(10):
-    print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
 
 # 데이터 로더에 넣어서 준비...
 batch_size = 32
@@ -103,14 +124,15 @@ class TextClassificationModel(nn.Module):
 
 
 # 모델, 손실함수, 최적화 함수 설정
-# 패딩 추가해서 단어사전 크기...
-vocab_size = len(word_index) + 1
+# 패딩 추가해서 단어사전 크기...과대적합 줄이기 위해서 위에서 단어사전 크기 제한...
+# vocab_size = len(word_index) + 1
 embedding_dim = 100
 
 model = TextClassificationModel(vocab_size, embedding_dim)
 criterion = nn.BCELoss()
-# 최적화 Adam의 lr, β 값 등은 기본값으로...
+# 최적화 Adam의 lr, β 값 등은 기본값으로...하면 과대적합 심하고, lr을 1/10으로 줄여서 과대적합 감소...약간...
 optimizer = optim.Adam(model.parameters())
+# optimizer = optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False)
 print(model)
 summary(
     model,
@@ -186,7 +208,7 @@ torch.save(model.state_dict(), "sarcasm_model.pth")
 def plot_training_metrics(
     train_loss_history, train_acc_history, val_loss_history, val_acc_history
 ):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     epochs = range(1, len(train_loss_history) + 1)
     # loss
     ax1.plot(epochs, train_loss_history, label="Train Loss")
@@ -211,4 +233,4 @@ def plot_training_metrics(
 plot_training_metrics(
     train_loss_history, train_acc_history, val_loss_history, val_acc_history
 )
-# 이 버전은 과대적합 문제가 있다고...
+# 리얼텍, VMware, total commander virtual disk 플러그인...
