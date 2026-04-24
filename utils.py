@@ -158,6 +158,7 @@ stopwords = [
     "well",
     "were",
     "weve",
+    "were",
     "what",
     "whats",
     "when",

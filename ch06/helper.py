@@ -12,10 +12,6 @@ def tokenize(text):
     soup = BeautifulSoup(text, "html.parser")
     cleaned_text = soup.get_text()
     tokens = cleaned_text.lower().split()
-    # 이 부분은 책의 helper에 없고 sarcasm 예제에 따로 붙어있던 부분인데...
-    # - , . 등을 단어에서 없애는 역할...maketrans(기존, 변경, 제외)
-    table = str.maketrans("", "", string.punctuation)
-    tokens = [word.translate(table) for word in tokens]
     filtered_tokens = [word for word in tokens if word not in stopwords]
     return filtered_tokens
 
@@ -42,9 +38,8 @@ def texts_to_sequences(texts, word_index):
     sequences = []
     for sentence in texts:
         sequence = []
-        for word in sentence.split():
-            if word in word_index:
-                sequence.append(word_index[word])
+        for word in tokenize(sentence):
+            sequence.append(word_index.get(word, 1))
         sequences.append(sequence)
     return sequences
 

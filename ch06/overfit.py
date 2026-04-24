@@ -19,6 +19,7 @@ sentences = []
 labels = []
 urls = []
 
+table = str.maketrans("", "", string.punctuation)
 for item in datastore:
     labels.append(item["is_sarcastic"])
     urls.append(item["article_link"])
@@ -29,7 +30,14 @@ for item in datastore:
     sentence = sentence.replace("-", " - ")
     sentence = sentence.replace("/", " / ")
     # 책 소스에서는 따로 bs4, stopword 적용해서 하는데, 나는 책 helper에서 만들어 둔 함수 이용...
-    sentence = " ".join(tokenize(sentence))
+    soup = BeautifulSoup(sentence, "html.parser")
+    sentence = soup.get_text()
+    words = sentence.split()
+    filtered_sentence = ""
+    for word in words:
+        word = word.translate(table)
+        if word not in stopwords:
+            filtered_sentence += word + " "
     sentences.append(sentence)
 
 # 문장 길이(문장 내 단어 수) 테스트 - 이걸로 max_length 줄여서 과대적합 감소 시도...
@@ -61,12 +69,12 @@ testing_labels = torch.tensor(testing_labels, dtype=torch.float32)
 # 어휘 사전은 훈련에만 만들고 - helper의 함수를 수정해서 단어 수 제한해서 과대적합 줄이기...
 vocab_size = 2000
 word_index = build_vocab(training_sentences, vocab_size)
-print(len(word_index))
+# print(len(word_index))
 
 # 이 위와 아래를 반복해서 적당한 vocab_size를 정해 과대적합을 줄인다...
-word_frequency = word_frequency(training_sentences, word_index)
-for i in range(10):
-    print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
+# word_frequency = word_frequency(training_sentences, word_index)
+# for i in range(10):
+#     print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
 
 # 단어 출현 빈도 그래프...
 # newlist = sorted(word_frequency.items(), key=lambda x: x[1], reverse=True)
@@ -116,16 +124,16 @@ criterion = nn.BCELoss()
 # optimizer = optim.Adam(model.parameters())
 # optimizer = optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False)
 # L2 규제를 적용해서 과대적합 감소 시도...
-# optimizer = optim.Adam(
-#     model.parameters(), lr=0.001, betas=(0.9, 0.999), amsgrad=False, weight_decay=0.01
-# )
 optimizer = optim.Adam(
-    [
-        {"params": model.fc1.parameters(), "weight_decay": 0.01},
-        {"params": [p for name, p in model.named_parameters() if "fc1" not in name]},
-    ],
-    lr=0.0001,
+    model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False, weight_decay=0.01
 )
+# optimizer = optim.Adam(
+#     [
+#         {"params": model.fc1.parameters(), "weight_decay": 0.01},
+#         {"params": [p for name, p in model.named_parameters() if "fc1" not in name]},
+#     ],
+#     lr=0.0001,
+# )
 print(model)
 summary(
     model,
@@ -145,7 +153,8 @@ val_loss_history = []
 val_acc_history = []
 
 # 100번 돌아가면서...300으로 소스가...
-num_epochs = 300
+# num_epochs = 300
+num_epochs = 100
 for epoch in range(num_epochs):
     model.train()
     train_loss = 0.0
