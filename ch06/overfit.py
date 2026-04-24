@@ -124,16 +124,16 @@ criterion = nn.BCELoss()
 # optimizer = optim.Adam(model.parameters())
 # optimizer = optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False)
 # L2 규제를 적용해서 과대적합 감소 시도...
-optimizer = optim.Adam(
-    model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False, weight_decay=0.01
-)
 # optimizer = optim.Adam(
-#     [
-#         {"params": model.fc1.parameters(), "weight_decay": 0.01},
-#         {"params": [p for name, p in model.named_parameters() if "fc1" not in name]},
-#     ],
-#     lr=0.0001,
+#     model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False, weight_decay=0.01
 # )
+optimizer = optim.Adam(
+    [
+        {"params": model.fc1.parameters(), "weight_decay": 0.01},
+        {"params": [p for name, p in model.named_parameters() if "fc1" not in name]},
+    ],
+    lr=0.0001,
+)
 print(model)
 summary(
     model,
@@ -153,8 +153,8 @@ val_loss_history = []
 val_acc_history = []
 
 # 100번 돌아가면서...300으로 소스가...
-# num_epochs = 300
-num_epochs = 100
+num_epochs = 300
+# num_epochs = 100
 for epoch in range(num_epochs):
     model.train()
     train_loss = 0.0
