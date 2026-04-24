@@ -32,8 +32,20 @@ for item in datastore:
     sentence = " ".join(tokenize(sentence))
     sentences.append(sentence)
 
+# 문장 길이(문장 내 단어 수) 테스트 - 이걸로 max_length 줄여서 과대적합 감소 시도...
+# xs, ys = [], []
+# curr_item = 1
+# for sentence in sentences:
+#     xs.append(curr_item)
+#     curr_item += 1
+#     ys.append(len(sentence))
+# newys = sorted(ys)
+# plt.plot(xs, newys)
+# plt.show()
+
 # 훈련 테스트 데이터셋 만들기...
-max_length = 100
+# max_length = 100
+max_length = 85
 training_size = 23000
 
 # 훈련과 테스트 나누고
@@ -51,7 +63,7 @@ vocab_size = 2000
 word_index = build_vocab(training_sentences, vocab_size)
 print(len(word_index))
 
-# 많이 나오는 단어...근데 여기 트럼프가 있네...
+# 이 위와 아래를 반복해서 적당한 vocab_size를 정해 과대적합을 줄인다...
 word_frequency = word_frequency(training_sentences, word_index)
 for i in range(10):
     print(f"{list(word_index.keys())[i]}: {word_frequency[list(word_index.keys())[i]]}")
@@ -88,51 +100,32 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_dataset = TensorDataset(testing_padded, testing_labels)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-
-# 모델 클래스 정의...
-class TextClassificationModel(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim=24):
-        super(TextClassificationModel, self).__init__()
-        # 단어 ID를 embedding dim(속성 차원들)에 난수로 시작되는 벡터에 맞추기...
-        # 앞에가 vocab_size인걸 보면 단어 ID를 원핫 벡터로 인식하는 듯...
-        # 예를 들면 (배치, 어휘 수) x (어휘 수, 임베딩 차원) -> (배치, 임베딩 차원)으로...
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        # 임베딩 층을 밀집 층에 연결한다...임베딩은 밀집이 아니다?...입력의 차원을 크기가 1인 고정 벡터로 줄인다?
-        self.avg_pool = nn.AdaptiveAvgPool1d(1)
-        # 이건 (배치, 임베딩 차원) x (임베딩 차원, 24) -> (배치, 24)로...
-        self.fc1 = nn.Linear(embedding_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        # 이건 (배치, 24) x (24, 1) -> (배치, 1)로
-        self.fc2 = nn.Linear(hidden_dim, 1)
-        # 그 1이 조롱이냐 아니냐를 판별
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        # 입력 x는 (batch_size, max_length)
-        embedded = self.embedding(x)
-        # 거쳐 나오면 (batch_size, max_length, embedding_dim)
-        # 뒤에 올 AdaptiveAvgPool1d가 (batch_size, embedding_dim, max_length)를 요구하니까...그에 맞춰 축 바꿈...
-        embedded = embedded.transpose(1, 2)
-        pooled = self.avg_pool(embedded).squeeze(2)
-        # 거쳐 나오면 (batch_size, embedding_dim)
-        x = self.fc1(pooled)
-        # 거쳐 나오면 (batch_size, 24)
-        x = self.relu(x)
-        x = self.fc2(x)
-        # 거쳐 나오면 (batch_size, 1)
-        return self.sigmoid(x)
-
-
 # 모델, 손실함수, 최적화 함수 설정
 # 패딩 추가해서 단어사전 크기...과대적합 줄이기 위해서 위에서 단어사전 크기 제한...
 # vocab_size = len(word_index) + 1
-embedding_dim = 100
+# 임베딩 차원도 단어사전 수의 네 제곱근이 좋다라...
+# embedding_dim = 100
+embedding_dim = int(vocab_size**0.25) + 1
+# 임베딩을 7 정도로 줄였으니, 그걸 받는 히든도 24는 좀 크다는...
+# hidden_dim = 24
+hidden_dim = 8
 
-model = TextClassificationModel(vocab_size, embedding_dim)
+model = TextClassificationModel(vocab_size, embedding_dim, hidden_dim)
 criterion = nn.BCELoss()
 # 최적화 Adam의 lr, β 값 등은 기본값으로...하면 과대적합 심하고, lr을 1/10으로 줄여서 과대적합 감소...약간...
-optimizer = optim.Adam(model.parameters())
+# optimizer = optim.Adam(model.parameters())
 # optimizer = optim.Adam(model.parameters(), lr=0.0001, betas=(0.9, 0.999), amsgrad=False)
+# L2 규제를 적용해서 과대적합 감소 시도...
+# optimizer = optim.Adam(
+#     model.parameters(), lr=0.001, betas=(0.9, 0.999), amsgrad=False, weight_decay=0.01
+# )
+optimizer = optim.Adam(
+    [
+        {"params": model.fc1.parameters(), "weight_decay": 0.01},
+        {"params": [p for name, p in model.named_parameters() if "fc1" not in name]},
+    ],
+    lr=0.0001,
+)
 print(model)
 summary(
     model,
@@ -151,8 +144,8 @@ train_acc_history = []
 val_loss_history = []
 val_acc_history = []
 
-# 100번 돌아가면서...
-num_epochs = 100
+# 100번 돌아가면서...300으로 소스가...
+num_epochs = 300
 for epoch in range(num_epochs):
     model.train()
     train_loss = 0.0
