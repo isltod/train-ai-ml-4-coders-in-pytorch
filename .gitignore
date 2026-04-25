@@ -3,6 +3,7 @@
 ptb.*.*
 data/
 *.pth
+*.tsv
 horse-or-human/
 
 # supabase

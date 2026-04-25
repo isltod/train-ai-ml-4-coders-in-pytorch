@@ -59,7 +59,7 @@ def build_vocab_glove(sentences, max_vocab_size=10000):
 
 
 # 여러 (문장)들을 받아서 (단어 ID 리스트)의 리스트로 반환
-def texts_to_sequences(sentences, word_index):
+def texts_to_sequences_glove(sentences, word_index):
     sequences = []
     for sentence in sentences:
         sequence = []
@@ -70,7 +70,7 @@ def texts_to_sequences(sentences, word_index):
 
 
 # 문장들에 패딩 넣기...
-def pad_sequences(sequences, max_len):
+def pad_sequences_glove(sequences, max_len):
     padded_sequences = []
     for seq in sequences:
         if len(seq) > max_len:
@@ -139,10 +139,10 @@ testing_labels = labels[training_size:]
 
 # GloVe 파일을 쓰지 않고, 원래 쓰던 sarcasm 파일로 사전을 만든다...근데 크기는 8K다...
 word_index = build_vocab_glove(training_sentences, max_vocab_size=vocab_size)
-training_sequences = texts_to_sequences(training_sentences, word_index)
-training_padded = pad_sequences(training_sequences, max_len=max_length)
-testing_sequences = texts_to_sequences(testing_sentences, word_index)
-testing_padded = pad_sequences(testing_sequences, max_len=max_length)
+training_sequences = texts_to_sequences_glove(training_sentences, word_index)
+training_padded = pad_sequences_glove(training_sequences, max_len=max_length)
+testing_sequences = texts_to_sequences_glove(testing_sentences, word_index)
+testing_padded = pad_sequences_glove(testing_sequences, max_len=max_length)
 
 # word_freq = word_frequency_glove(sentences, word_index)
 # print(word_freq)
@@ -292,7 +292,7 @@ for epoch in range(num_epochs):
     with torch.no_grad():
         for inputs, targets in test_loader:
             inputs, targets = inputs.to(device), targets.to(device)
-            ouputs = model(inputs)
+            outputs = model(inputs)
             loss = criterion(outputs.squeeze(), targets)
 
             val_loss += loss.item()
